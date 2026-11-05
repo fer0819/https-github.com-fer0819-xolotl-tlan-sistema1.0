@@ -244,3 +244,23 @@ begin
   alter publication supabase_realtime add table public.orders;
 exception when duplicate_object then null;
 end $$;
+
+-- Registrar automáticamente el historial cuando el personal cambia el estado.
+create or replace function public.log_order_status_change()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if old.status is distinct from new.status then
+    insert into public.order_status_history(order_id, old_status, new_status, changed_by)
+    values (new.id, old.status, new.status, auth.uid());
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists orders_status_history_trigger on public.orders;
+create trigger orders_status_history_trigger
+before update of status on public.orders
+for each row execute function public.log_order_status_change();
