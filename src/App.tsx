@@ -31,6 +31,11 @@ export default function App() {
   const [saving,setSaving] = useState(false)
   const [connectionError,setConnectionError] = useState('')
   const [notice,setNotice] = useState('')
+  const [session,setSession] = useState<any>(null)
+  const [email,setEmail] = useState('')
+  const [password,setPassword] = useState('')
+  const [authBusy,setAuthBusy] = useState(false)
+  const [authError,setAuthError] = useState('')
   const total = cart.reduce((sum,item)=>sum+item.dish.price*item.quantity,0)
   const filtered = useMemo(()=>dishes.filter(d=>d.name.toLowerCase().includes(search.toLowerCase())&&(category==='Todos'||d.category===category)),[dishes,search,category])
 
@@ -58,11 +63,25 @@ export default function App() {
 
   useEffect(()=>{
     if(!supabase) return
+    void supabase.auth.getSession().then(({data})=>setSession(data.session))
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>setSession(nextSession))
+    return ()=>subscription.unsubscribe()
+  },[])
+
+  useEffect(()=>{
+    if(!supabase || !session) return
     void refresh()
     const channel = supabase.channel('xolotl-orders-live').on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{void loadOrders()}).subscribe()
     return ()=>{void supabase.removeChannel(channel)}
-  },[refresh,loadOrders])
+  },[refresh,loadOrders,session])
 
+  const signIn=async(e:React.FormEvent)=>{
+    e.preventDefault(); if(!supabase) return
+    setAuthBusy(true);setAuthError('')
+    const {error}=await supabase.auth.signInWithPassword({email,password})
+    if(error) setAuthError(error.message)
+    setAuthBusy(false)
+  }
   const addToCart=(dish:Dish)=>setCart(current=>{
     const found=current.find(item=>item.dish.id===dish.id)
     return found?current.map(item=>item.dish.id===dish.id?{...item,quantity:item.quantity+1}:item):[...current,{dish,quantity:1}]
@@ -95,13 +114,15 @@ export default function App() {
     } else setOrders(current=>current.map(item=>item.id===order.id?{...item,status:next}:item))
   }
 
+  if(isSupabaseConfigured && !session) return <div className="login-screen"><form className="login-card" onSubmit={signIn}><div className="brand-mark">XT</div><div className="brand-name">XOLOTL <span>TLAN</span></div><p className="brand-caption">ACCESO DEL PERSONAL</p><h1>Bienvenido</h1><p>Inicia sesión para consultar pedidos y cocina.</p><label className="field-label">Correo electrónico<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@xolotltlan.com"/></label><label className="field-label">Contraseña<input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Tu contraseña"/></label>{authError&&<div className="connection-banner error">{authError}</div>}<button className="primary-button checkout" disabled={authBusy}>{authBusy?'Ingresando…':'Iniciar sesión'}</button><small>El administrador debe crear tu usuario en Supabase.</small></form></div>
+
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand-mark">XT</div><div className="brand-name">XOLOTL <span>TLAN</span></div><p className="brand-caption">TRADICIÓN · SABOR · SERVICIO</p><div className="side-label">OPERACIÓN</div>
       {(['Pedidos','Menú','Cocina'] as const).map(item=><button key={item} className={section===item?'nav-item active':'nav-item'} onClick={()=>setSection(item)}>{item==='Pedidos'?<ClipboardList size={18}/>:item==='Menú'?<Utensils size={18}/>:<ChefHat size={18}/>}<span>{item}</span>{item==='Cocina'&&orders.filter(o=>o.status!=='Listo'&&o.status!=='Entregado').length>0&&<b>{orders.filter(o=>o.status!=='Listo'&&o.status!=='Entregado').length}</b>}</button>)}
       <div className="sidebar-bottom"><div className="status-dot"/>{isSupabaseConfigured?'Base de datos configurada':'Modo demostración'}<small>XOLOTL TLAN · v0.2</small></div>
     </aside>
     <main className="main-area">
-      <header className="topbar"><div><span className="eyebrow">XOLOTL TLAN / PANEL DE CONTROL</span><h1>{section==='Pedidos'?'Gestión de pedidos':section==='Menú'?'Menú y disponibilidad':'Pantalla de cocina'}</h1></div><div className="top-actions"><span className="open-pill"><i/>{isSupabaseConfigured?'Conexión configurada':'Vista previa'}</span><button className="icon-button" aria-label="Actualizar" onClick={()=>void refresh()}><RefreshCw size={18}/></button><div className="avatar">XT</div></div></header>
+      <header className="topbar"><div><span className="eyebrow">XOLOTL TLAN / PANEL DE CONTROL</span><h1>{section==='Pedidos'?'Gestión de pedidos':section==='Menú'?'Menú y disponibilidad':'Pantalla de cocina'}</h1></div><div className="top-actions"><span className="open-pill"><i/>{isSupabaseConfigured?'Conexión configurada':'Vista previa'}</span><button className="icon-button" aria-label="Actualizar" onClick={()=>void refresh()}><RefreshCw size={18}/></button><button className="avatar avatar-button" title="Cerrar sesión" onClick={()=>void supabase?.auth.signOut()}>XT</button></div></header>
       {!isSupabaseConfigured&&<div className="connection-banner"><Database size={17}/><span>La base de datos aún no está conectada. Estás viendo el modo de demostración; los pedidos no se guardan permanentemente.</span></div>}
       {connectionError&&<div className="connection-banner error"><Database size={17}/><span>No se pudo conectar: {connectionError}</span></div>}
       {notice&&<div className="connection-banner"><span>{notice}</span><button className="text-button" onClick={()=>setNotice('')}>Cerrar</button></div>}
