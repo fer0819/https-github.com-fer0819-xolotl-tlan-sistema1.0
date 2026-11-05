@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bell, ChefHat, ClipboardList, Clock3, Plus, Search, ShoppingBag, Utensils, X, RefreshCw, Database } from 'lucide-react'
+import { ChefHat, ClipboardList, Clock3, Plus, Search, ShoppingBag, Utensils, X, RefreshCw, Database } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 type Dish = { id: string; name: string; description: string; price: number; category: string; available: boolean }
@@ -69,10 +69,11 @@ export default function App() {
   },[])
 
   useEffect(()=>{
-    if(!supabase || !session) return
+    const client = supabase
+    if(!client || !session) return
     void refresh()
-    const channel = supabase.channel('xolotl-orders-live').on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{void loadOrders()}).subscribe()
-    return ()=>{void supabase.removeChannel(channel)}
+    const channel = client.channel('xolotl-orders-live').on('postgres_changes',{event:'*',schema:'public',table:'orders'},()=>{void loadOrders()}).subscribe()
+    return ()=>{void client.removeChannel(channel)}
   },[refresh,loadOrders,session])
 
   const signIn=async(e:React.FormEvent)=>{
