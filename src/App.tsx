@@ -36,6 +36,10 @@ export default function App() {
   const [password,setPassword] = useState('')
   const [authBusy,setAuthBusy] = useState(false)
   const [authError,setAuthError] = useState('')
+  const [recoveryMode,setRecoveryMode] = useState(false)
+  const [newPassword,setNewPassword] = useState('')
+  const [confirmNewPassword,setConfirmNewPassword] = useState('')
+  const [recoveryNotice,setRecoveryNotice] = useState('')
   const total = cart.reduce((sum,item)=>sum+item.dish.price*item.quantity,0)
   const filtered = useMemo(()=>dishes.filter(d=>d.name.toLowerCase().includes(search.toLowerCase())&&(category==='Todos'||d.category===category)),[dishes,search,category])
 
@@ -63,8 +67,15 @@ export default function App() {
 
   useEffect(()=>{
     if(!supabase) return
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,nextSession)=>{
+      setSession(nextSession)
+      if(event==='PASSWORD_RECOVERY') {
+        setRecoveryMode(true)
+        setAuthError('')
+        setRecoveryNotice('')
+      }
+    })
     void supabase.auth.getSession().then(({data})=>setSession(data.session))
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>setSession(nextSession))
     return ()=>subscription.unsubscribe()
   },[])
 
@@ -78,9 +89,39 @@ export default function App() {
 
   const signIn=async(e:React.FormEvent)=>{
     e.preventDefault(); if(!supabase) return
-    setAuthBusy(true);setAuthError('')
+    setAuthBusy(true);setAuthError('');setRecoveryNotice('')
     const {error}=await supabase.auth.signInWithPassword({email,password})
     if(error) setAuthError(error.message)
+    setAuthBusy(false)
+  }
+
+  const sendPasswordRecovery=async()=>{
+    if(!supabase) return
+    if(!email.trim()) { setAuthError('Escribe tu correo electrónico para enviarte el enlace.'); return }
+    setAuthBusy(true);setAuthError('');setRecoveryNotice('')
+    const {error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:window.location.origin})
+    if(error) setAuthError(error.message)
+    else setRecoveryNotice('Si el correo está registrado, recibirás un enlace para crear una nueva contraseña. Revisa también la carpeta de correo no deseado.')
+    setAuthBusy(false)
+  }
+
+  const updatePassword=async(e:React.FormEvent)=>{
+    e.preventDefault(); if(!supabase) return
+    setAuthError('');setRecoveryNotice('')
+    if(newPassword.length<8) { setAuthError('La nueva contraseña debe tener al menos 8 caracteres.'); return }
+    if(newPassword!==confirmNewPassword) { setAuthError('Las contraseñas no coinciden.'); return }
+    setAuthBusy(true)
+    const {error}=await supabase.auth.updateUser({password:newPassword})
+    if(error) setAuthError(error.message)
+    else {
+      await supabase.auth.signOut()
+      setSession(null)
+      setPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      setRecoveryMode(false)
+      setRecoveryNotice('Contraseña actualizada. Ya puedes iniciar sesión con tu nueva contraseña.')
+    }
     setAuthBusy(false)
   }
   const addToCart=(dish:Dish)=>setCart(current=>{
@@ -115,7 +156,7 @@ export default function App() {
     } else setOrders(current=>current.map(item=>item.id===order.id?{...item,status:next}:item))
   }
 
-  if(isSupabaseConfigured && !session) return <div className="login-screen"><form className="login-card" onSubmit={signIn}><div className="brand-mark">XT</div><div className="brand-name">XOLOTL <span>TLAN</span></div><p className="brand-caption">ACCESO DEL PERSONAL</p><h1>Bienvenido</h1><p>Inicia sesión para consultar pedidos y cocina.</p><label className="field-label">Correo electrónico<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@xolotltlan.com"/></label><label className="field-label">Contraseña<input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Tu contraseña"/></label>{authError&&<div className="connection-banner error">{authError}</div>}<button className="primary-button checkout" disabled={authBusy}>{authBusy?'Ingresando…':'Iniciar sesión'}</button><small>El administrador debe crear tu usuario en Supabase.</small></form></div>
+  if(isSupabaseConfigured && (recoveryMode || !session)) return <div className="login-screen"><form className="login-card" onSubmit={recoveryMode?updatePassword:signIn}><div className="brand-mark">XT</div><div className="brand-name">XOLOTL <span>TLAN</span></div><p className="brand-caption">ACCESO DEL PERSONAL</p>{recoveryMode?<><h1>Nueva contraseña</h1><p>Elige una contraseña segura para tu cuenta.</p><label className="field-label">Nueva contraseña<input type="password" required minLength={8} value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Mínimo 8 caracteres"/></label><label className="field-label">Confirmar nueva contraseña<input type="password" required minLength={8} value={confirmNewPassword} onChange={e=>setConfirmNewPassword(e.target.value)} placeholder="Repite la nueva contraseña"/></label><button className="primary-button checkout" disabled={authBusy}>{authBusy?'Guardando…':'Guardar nueva contraseña'}</button><button type="button" className="text-button" onClick={()=>{setRecoveryMode(false);setAuthError('');setRecoveryNotice('')}}>Volver al inicio de sesión</button></>:<><h1>Bienvenido</h1><p>Inicia sesión para consultar pedidos y cocina.</p><label className="field-label">Correo electrónico<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@xolotltlan.com"/></label><label className="field-label">Contraseña<input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Tu contraseña"/></label><button className="primary-button checkout" disabled={authBusy}>{authBusy?'Ingresando…':'Iniciar sesión'}</button><button type="button" className="text-button" disabled={authBusy} onClick={()=>void sendPasswordRecovery()}>¿Olvidaste tu contraseña?</button><small>El administrador debe crear tu usuario en Supabase.</small></>}{authError&&<div className="connection-banner error">{authError}</div>}{recoveryNotice&&<div className="connection-banner">{recoveryNotice}</div>}</form></div>
 
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand-mark">XT</div><div className="brand-name">XOLOTL <span>TLAN</span></div><p className="brand-caption">TRADICIÓN · SABOR · SERVICIO</p><div className="side-label">OPERACIÓN</div>
