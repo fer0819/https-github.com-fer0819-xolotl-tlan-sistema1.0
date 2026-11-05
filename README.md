@@ -8,7 +8,17 @@ Este proyecto usa un proyecto Supabase propio. **No conectes las credenciales ni
 1. Crea un proyecto nuevo en https://supabase.com con el nombre `xolotl-tlan`.
 2. Entra en **SQL Editor** y ejecuta completo `supabase/migrations/001_initial_schema.sql`.
 3. En **Project Settings → API** copia Project URL y la clave pública anon/publishable.
-4. Crea `.env.local` en la raíz del proyecto con:
+4. En **Authentication → Users**, crea el usuario del administrador con su correo y contraseña.
+5. En **SQL Editor**, registra ese primer administrador sustituyendo el correo por el que acabas de crear:
+
+```sql
+insert into public.staff_profiles (user_id, display_name, role)
+select id, 'Administrador principal', 'administrador'
+from auth.users
+where email = 'TU_CORREO';
+```
+
+6. Crea `.env.local` en la raíz del proyecto con:
 
 ```env
 VITE_SUPABASE_URL=https://TU-PROYECTO.supabase.co
@@ -34,7 +44,7 @@ npm run build
 - Función `submit_public_order` para recepción segura de pedidos QR.
 - Realtime para que la pantalla de cocina se actualice al entrar un pedido.
 
-La interfaz se conecta automáticamente cuando existen las variables Supabase. Mientras no se configuren, permanece en modo demostración. Para activar pedidos entre dispositivos, primero hay que crear el proyecto Supabase, ejecutar la migración y colocar las dos variables en `.env.local`.
+La interfaz se conecta automáticamente cuando existen las variables Supabase. El panel interno solicita inicio de sesión; crea el primer usuario y asígnale el perfil de administrador con el SQL anterior. Mientras no se configuren las variables, permanece en modo demostración. Para activar pedidos entre dispositivos, hay que crear el proyecto Supabase, ejecutar la migración y colocar las dos variables en `.env.local`.
 
 ## Siguiente etapa
 Autenticación del personal, menú QR público, impresión térmica y despliegue web instalable.
