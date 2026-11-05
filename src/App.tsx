@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Bell, ChefHat, ClipboardList, Clock3, Menu, Plus, Printer, QrCode, Search, ShoppingBag, Utensils, X } from 'lucide-react'
+import { Bell, ChefHat, ClipboardList, Clock3, Plus, Search, ShoppingBag, Utensils, X } from 'lucide-react'
 
 type Dish = { id: number; name: string; description: string; price: number; category: string; available: boolean }
 type OrderItem = { dish: Dish; quantity: number }
